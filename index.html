@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gandxo Store — Applications de Gandxo</title>
+  <meta name="description" content="Découvre et télécharge les applications développées par Gandxo. Gandxo Store est la plateforme officielle de distribution de ses projets." />
+
+  <meta property="og:title" content="Gandxo Store" />
+  <meta property="og:description" content="Découvre et télécharge les applications développées par Gandxo." />
+  <meta property="og:type" content="website" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="responsive.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Aller au contenu principal</a>
+
+  <header id="site-header" class="site-header"></header>
+
+  <main id="main-content">
+    <section class="hero">
+      <div class="hero-inner">
+        <p class="eyebrow">gandxo store · v1.0</p>
+        <h1>Les applications de Gandxo,<br />livrées directement.</h1>
+        <p class="hero-sub">Découvre, installe et suis les mises à jour des projets que je construis — sans intermédiaire, sans chiffres inventés.</p>
+        <div class="hero-actions">
+          <a href="#apps" class="btn-primary">Explorer les applications</a>
+          <a href="about.html" class="btn-ghost">À propos du projet</a>
+        </div>
+      </div>
+      <div class="hero-terminal" aria-hidden="true">
+        <div class="terminal-bar"><span></span><span></span><span></span></div>
+        <pre><code>$ gandxo-store --list
+&gt; récupération des applications publiées…
+&gt; source : firestore (temps réel)
+&gt; statistiques : téléchargements réels uniquement
+$ _</code></pre>
+      </div>
+    </section>
+
+    <section id="categories" class="categories-section">
+      <div id="category-chips" class="category-chips"></div>
+    </section>
+
+    <section id="apps" class="apps-section">
+      <h2>Applications</h2>
+      <div id="apps-grid" class="apps-grid" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <footer id="site-footer" class="site-footer"></footer>
+
+  <script type="module">
+    import { renderHeader, renderFooter } from "./app.js";
+    import { initHomePage } from "./store.js";
+
+    renderHeader("home");
+    renderFooter();
+    initHomePage();
+  </script>
+</body>
+</html>

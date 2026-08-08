@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tableau de bord — Gandxo Store</title>
+  <meta name="robots" content="noindex, nofollow" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="admin.css" />
+  <link rel="stylesheet" href="responsive.css" />
+</head>
+<body class="admin-body">
+  <header class="admin-topbar">
+    <div class="logo">
+      <span class="logo-mark">GS</span>
+      <span class="logo-text">GANDXO<em>DASHBOARD</em></span>
+    </div>
+    <div class="admin-topbar-right">
+      <span id="admin-user-email" class="admin-user-email"></span>
+      <button id="logout-btn" class="btn-ghost small">Se déconnecter</button>
+    </div>
+  </header>
+
+  <nav class="admin-tabs">
+    <button class="admin-tab-btn active" data-tab="dashboard">Tableau de bord</button>
+    <button class="admin-tab-btn" data-tab="applications">Applications</button>
+  </nav>
+
+  <main class="admin-main">
+    <!-- ================= DASHBOARD ================= -->
+    <section id="tab-dashboard" class="admin-tab-panel active">
+      <div id="stat-cards" class="stat-cards"></div>
+
+      <div class="chart-panel">
+        <div class="chart-panel-header">
+          <h2>Évolution des téléchargements</h2>
+          <div class="range-buttons">
+            <button class="range-btn" data-range="24h">24H</button>
+            <button class="range-btn active" data-range="7j">7 JOURS</button>
+            <button class="range-btn" data-range="30j">30 JOURS</button>
+            <button class="range-btn" data-range="3m">3 MOIS</button>
+            <button class="range-btn" data-range="1a">1 AN</button>
+            <button class="range-btn" data-range="tout">TOUT</button>
+          </div>
+        </div>
+        <div class="chart-canvas-wrap">
+          <canvas id="downloads-chart" height="260"></canvas>
+          <p id="chart-empty" class="empty-state"></p>
+        </div>
+      </div>
+
+      <div class="table-panel">
+        <h2>Statistiques par application</h2>
+        <div id="app-stats-table"></div>
+      </div>
+    </section>
+
+    <!-- ================= APPLICATIONS ================= -->
+    <section id="tab-applications" class="admin-tab-panel">
+      <div class="panel-header-row">
+        <h2>Gestion des applications</h2>
+        <button id="add-app-btn" class="btn-primary">+ Ajouter une application</button>
+      </div>
+      <div id="apps-admin-list" class="apps-admin-list"></div>
+    </section>
+  </main>
+
+  <!-- ================= MODALE : formulaire application ================= -->
+  <div id="app-form-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="app-form-title">Ajouter une application</h2>
+        <button type="button" id="app-form-cancel" class="modal-close" aria-label="Fermer">✕</button>
+      </div>
+      <form id="app-form" class="modal-form">
+        <label for="f-name">Nom</label>
+        <input id="f-name" name="name" required />
+
+        <label for="f-shortDesc">Description courte</label>
+        <input id="f-shortDesc" name="shortDesc" maxlength="140" />
+
+        <label for="f-fullDesc">Description complète</label>
+        <textarea id="f-fullDesc" name="fullDesc" rows="4"></textarea>
+
+        <div class="form-grid">
+          <div>
+            <label for="f-icon">Icône</label>
+            <input id="f-icon" name="icon" type="url" placeholder="https://..." />
+            <div class="upload-row">
+              <input type="file" id="f-icon-file" accept="image/*" hidden />
+              <button type="button" class="btn-ghost small" id="f-icon-upload-btn">Téléverser une image</button>
+              <span class="upload-status" id="f-icon-upload-status"></span>
+            </div>
+          </div>
+          <div>
+            <label for="f-category">Catégorie</label>
+            <input id="f-category" name="category" />
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div>
+            <label for="f-currentVersion">Version</label>
+            <input id="f-currentVersion" name="currentVersion" placeholder="1.0.0" />
+          </div>
+          <div>
+            <label for="f-size">Taille</label>
+            <input id="f-size" name="size" placeholder="25 Mo" />
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div>
+            <label for="f-compatibility">Compatibilité</label>
+            <input id="f-compatibility" name="compatibility" placeholder="Android 8.0+" />
+          </div>
+          <div>
+            <label for="f-developer">Développeur</label>
+            <input id="f-developer" name="developer" />
+          </div>
+        </div>
+
+        <label for="f-downloadUrl">Lien de téléchargement</label>
+        <input id="f-downloadUrl" name="downloadUrl" type="url" />
+
+        <label for="f-screenshots">Captures d'écran (une URL par ligne)</label>
+        <textarea id="f-screenshots" name="screenshots" rows="3"></textarea>
+        <div class="upload-row">
+          <input type="file" id="f-screenshots-file" accept="image/*" multiple hidden />
+          <button type="button" class="btn-ghost small" id="f-screenshots-upload-btn">Téléverser des images</button>
+          <span class="upload-status" id="f-screenshots-upload-status"></span>
+        </div>
+
+        <label for="f-features">Fonctionnalités (une par ligne)</label>
+        <textarea id="f-features" name="features" rows="3"></textarea>
+
+        <label for="f-changelog">Notes de version</label>
+        <textarea id="f-changelog" name="changelog" rows="2"></textarea>
+
+        <label for="f-status">Statut</label>
+        <select id="f-status" name="status">
+          <option value="draft">Brouillon</option>
+          <option value="published">Publiée</option>
+        </select>
+
+        <div class="modal-actions">
+          <button type="button" id="app-form-cancel-2" class="btn-ghost" onclick="document.getElementById('app-form-cancel').click()">Annuler</button>
+          <button type="submit" class="btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================= MODALE : versions ================= -->
+  <div id="versions-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Versions — <span id="versions-app-name"></span></h2>
+        <button type="button" id="version-form-close" class="modal-close" aria-label="Fermer">✕</button>
+      </div>
+
+      <ul id="versions-list" class="versions-list"></ul>
+
+      <h3>Ajouter une version</h3>
+      <form id="version-form" class="modal-form">
+        <div class="form-grid">
+          <div>
+            <label for="v-versionNumber">Numéro de version</label>
+            <input id="v-versionNumber" name="versionNumber" required placeholder="1.4.0" />
+          </div>
+          <div>
+            <label for="v-versionCode">Version code</label>
+            <input id="v-versionCode" name="versionCode" placeholder="14" />
+          </div>
+        </div>
+        <div class="form-grid">
+          <div>
+            <label for="v-date">Date</label>
+            <input id="v-date" name="date" type="date" />
+          </div>
+          <div>
+            <label for="v-size">Taille</label>
+            <input id="v-size" name="size" placeholder="26 Mo" />
+          </div>
+        </div>
+        <label for="v-compatibility">Compatibilité</label>
+        <input id="v-compatibility" name="compatibility" placeholder="Android 8.0+" />
+
+        <label for="v-downloadUrl">Lien de téléchargement</label>
+        <input id="v-downloadUrl" name="downloadUrl" type="url" />
+
+        <label for="v-changelog">Changelog</label>
+        <textarea id="v-changelog" name="changelog" rows="2"></textarea>
+
+        <div class="modal-actions">
+          <button type="submit" class="btn-primary">Ajouter la version</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="admin.js"></script>
+</body>
+</html>

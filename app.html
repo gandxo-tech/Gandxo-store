@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Application — Gandxo Store</title>
+  <meta name="description" content="Fiche détaillée d'une application distribuée sur Gandxo Store." />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="responsive.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Aller au contenu principal</a>
+
+  <header id="site-header" class="site-header"></header>
+
+  <main id="main-content">
+    <div class="breadcrumb"><a href="index.html">← Retour au store</a></div>
+    <section id="app-detail" class="app-detail" aria-live="polite"></section>
+  </main>
+
+  <footer id="site-footer" class="site-footer"></footer>
+
+  <script type="module">
+    import { renderHeader, renderFooter } from "./app.js";
+    import { initAppPage } from "./store.js";
+
+    renderHeader("apps");
+    renderFooter();
+    initAppPage();
+  </script>
+</body>
+</html>

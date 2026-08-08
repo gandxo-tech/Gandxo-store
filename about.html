@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>À propos — Gandxo Store</title>
+  <meta name="description" content="Gandxo Store est la plateforme de distribution des applications développées par Gandxo." />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="responsive.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Aller au contenu principal</a>
+
+  <header id="site-header" class="site-header"></header>
+
+  <main id="main-content">
+    <section class="about-page">
+      <p class="eyebrow">à propos</p>
+      <h1>À propos de Gandxo Store</h1>
+
+      <p>
+        Gandxo Store est l'espace où je publie et distribue directement les applications
+        que je développe. Pas d'intermédiaire, pas de store tiers : chaque fiche, chaque
+        version et chaque statistique de téléchargement vient d'une source réelle et
+        persistante.
+      </p>
+      <p>
+        L'objectif est simple : rendre mes projets faciles à découvrir, installer et
+        suivre dans le temps — avec des mises à jour transparentes et un historique de
+        versions complet pour chaque application.
+      </p>
+
+      <h2>Me suivre</h2>
+      <div class="social-links">
+        <a href="https://www.instagram.com/richx_land?igsh=bHQ4bDIxcDl0d2c4" target="_blank" rel="noopener noreferrer" class="social-link">
+          <span>Instagram</span>
+        </a>
+        <a href="https://www.facebook.com/profile.php?id=61584148961809" target="_blank" rel="noopener noreferrer" class="social-link">
+          <span>Facebook</span>
+        </a>
+      </div>
+
+      <h2>Espace administrateur</h2>
+      <p>Cet espace est réservé à Gandxo pour la gestion des applications et le suivi des statistiques réelles.</p>
+      <a href="login.html" class="btn-ghost">Accéder à l'administration</a>
+    </section>
+  </main>
+
+  <footer id="site-footer" class="site-footer"></footer>
+
+  <script type="module">
+    import { renderHeader, renderFooter } from "./app.js";
+    renderHeader("about");
+    renderFooter();
+  </script>
+</body>
+</html>
