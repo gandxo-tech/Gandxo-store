@@ -162,3 +162,29 @@ export function formatDate(value) {
 export function formatNumber(n) {
   return new Intl.NumberFormat("fr-FR").format(n || 0);
 }
+
+// -----------------------------------------------------------------
+// Optimisation des images Cloudinary : insère f_auto (meilleur format
+// selon le navigateur, WebP/AVIF) et q_auto (qualité automatique), plus
+// un redimensionnement ciblé. Rend le site nettement plus rapide sur
+// data mobile. N'affecte que les vraies URLs Cloudinary ; toute autre
+// URL est renvoyée inchangée.
+// -----------------------------------------------------------------
+export function cloudinaryOptimize(url, { width } = {}) {
+  if (!url || !url.includes("res.cloudinary.com") || !url.includes("/upload/")) {
+    return url;
+  }
+  const transform = width ? `f_auto,q_auto,w_${width}` : "f_auto,q_auto";
+  return url.replace("/upload/", `/upload/${transform}/`);
+}
+
+// -----------------------------------------------------------------
+// PWA : enregistre le service worker (rend le site installable sur
+// l'écran d'accueil). N'intercepte que les fichiers du site lui-même,
+// jamais les requêtes Firebase/Cloudinary (voir sw.js).
+// -----------------------------------------------------------------
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  });
+}

@@ -4,59 +4,67 @@ Tous les fichiers du site sont dans `main/`, à plat. `firestore.rules` et ce
 `README.md` sont à côté : ce ne sont pas des fichiers du site, mais de la
 config Firebase.
 
-## Déjà fait pour toi
+## 🆕 Dernière mise à jour
 
-- `main/app.js` contient déjà ta config Firebase (`chat-anonyme`) et ton
-  compte Cloudinary (`dwdlwjdhe` / `sis_preset`).
-- Dans l'admin, les champs "Icône" et "Captures d'écran" ont un bouton
-  **Téléverser** qui envoie directement l'image sur Cloudinary et colle
-  l'URL — plus besoin d'héberger les images ailleurs et de copier un lien.
-- Comme ton projet Firebase est partagé avec SIS, toutes les collections de
-  Gandxo Store sont préfixées `store_` (`store_apps`, `store_downloads`,
-  `store_admins`) pour ne jamais toucher aux données de SIS.
+- **Stats protégées contre le spam** : les règles Firestore vérifient
+  maintenant que chaque téléchargement enregistré correspond à une vraie
+  app publiée, avec un timestamp serveur infalsifiable. → il faut
+  republier `firestore.rules` (voir étape 2 ci-dessous).
+- **Site installable (PWA)** : `manifest.json` + `sw.js` + icônes
+  (`icon-192.png`, `icon-512.png`, `favicon.png`, `favicon-32.png`) ajoutés.
+  Sur Android/Chrome, un visiteur peut "Ajouter à l'écran d'accueil" et le
+  site s'ouvre comme une vraie app.
+- **Partage réseaux sociaux amélioré** : une image d'aperçu (`og-image.png`)
+  s'affiche maintenant quand tu partages un lien du store sur
+  Facebook/Instagram/WhatsApp.
+- **Images plus rapides** : les icônes et captures d'écran hébergées sur
+  Cloudinary sont automatiquement servies en format optimisé (WebP/AVIF
+  selon l'appareil) et à la bonne taille — utile sur data mobile.
+
+⚠️ Tous les nouveaux fichiers (`manifest.json`, `sw.js`, `og-image.png`,
+`icon-192.png`, `icon-512.png`, `favicon.png`, `favicon-32.png`) doivent
+être uploadés à la racine de ton repo GitHub, à côté des autres fichiers du
+site — sinon les icônes et le mode installable ne fonctionneront pas.
+
+## Déjà fait
+
+- `main/app.js` contient ta config Firebase (`chat-anonyme`), ton compte
+  Cloudinary (`dwdlwjdhe` / `sis_preset`), et ton e-mail admin.
+- Dans l'admin, "Icône" et "Captures d'écran" ont un bouton **Téléverser**
+  qui envoie l'image sur Cloudinary et colle l'URL automatiquement.
+- Toutes les collections sont préfixées `store_` pour ne jamais toucher aux
+  données de SIS dans le même projet Firebase.
+- Ton compte admin (`gbaguidiexauce@gmail.com`) est déjà créé dans
+  Authentication. C'est le seul admin possible : vérifié par e-mail
+  directement dans les règles Firestore.
 
 ## Ce qu'il reste à faire
 
 ### 1. Activer l'authentification par e-mail/mot de passe
 Firebase Console > **Authentication** > Sign-in method > active
-**E-mail/Mot de passe** (si ce n'est pas déjà fait pour SIS).
-Puis **Authentication > Users**, ajoute ton compte admin (e-mail + mot de passe).
+**E-mail/Mot de passe**.
 
-### 2. Fusionner les règles de sécurité — ⚠️ ne pas juste coller
-`firestore.rules` (à la racine, pas dans `main/`) contient les règles pour
-`store_apps`, `store_downloads` et `store_admins`. Comme ce projet a déjà des
-règles pour SIS, **ajoute ces 3 blocs `match` dans le fichier de règles
-existant** (Firestore Database > Règles), au lieu de remplacer tout le
-fichier. Envoie-moi les règles actuelles de SIS si tu veux que je fasse la
-fusion moi-même.
+### 2. Republier les règles Firestore
+`firestore.rules` (à la racine) contient la version à jour, avec la
+protection anti-spam des téléchargements. Colle-le dans Firestore
+Database > Règles > **Publier**. Comme d'habitude, si SIS a ses propres
+règles à côté, fusionne au lieu de remplacer tout le fichier.
 
-### 3. Te déclarer administrateur du store
+### 3. Déployer
+`main/` est un site statique pur : Vercel, Firebase Hosting, GitHub Pages
+ou Netlify, sans build.
 
-`setup-admin.js` crée ton compte Auth (si besoin) **et** ton doc
-`store_admins` en une seule commande :
-1. `npm install firebase-admin`
-2. Firebase Console > ⚙️ Paramètres du projet > Comptes de service >
-   "Générer une nouvelle clé privée" > télécharge le JSON, renomme-le
-   `serviceAccountKey.json`, place-le à côté de `setup-admin.js`.
-   ⚠️ Ne jamais partager ni committer ce fichier.
-3. `node setup-admin.js ton-email@exemple.com ton-mot-de-passe`
+## Pour aller plus loin (pas fait, sur demande)
 
-Connecte-toi ensuite sur `login.html` avec ces identifiants pour accéder à
-`admin.html`.
-
-### 4. Déployer
-`main/` est un site statique pur : il se déploie tel quel sur Vercel,
-Firebase Hosting ou Netlify, sans build.
+- **Nom de domaine personnalisé** — nécessite d'acheter un domaine et de
+  configurer le DNS ; possible sur GitHub Pages une fois que tu en as un.
+- **Notifications push** — `VAPID_KEY` est présent dans `app.js` mais
+  inutilisé, prêt si tu veux des notifs de nouvelle version plus tard.
 
 ## Notes
 
-- `VAPID_KEY` est présent dans `app.js` mais n'est utilisé nulle part : je
-  ne l'ai pas branché sur des notifications push, cette fonctionnalité
-  n'était pas demandée pour le store. Dis-moi si tu veux que j'ajoute des
-  notifications de nouvelles versions (nécessite un service worker en plus).
-- Tant qu'aucune app n'est publiée et qu'aucun téléchargement n'a eu lieu,
-  tout le site affiche des états vides explicites — jamais de données
-  inventées.
+Tant qu'aucune app n'est publiée et qu'aucun téléchargement n'a eu lieu, le
+site affiche des états vides explicites — jamais de données inventées.
 
 ### Structure des données Firestore
 
@@ -66,4 +74,3 @@ Firebase Hosting ou Netlify, sans build.
   `totalDownloads`, `createdAt`, `updatedAt`.
 - `store_apps/{appId}/versions/{versionId}` — historique des versions.
 - `store_downloads/{downloadId}` — `appId`, `appName`, `version`, `timestamp`.
-- `store_admins/{uid}` — un document par administrateur autorisé.

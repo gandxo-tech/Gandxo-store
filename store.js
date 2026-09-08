@@ -5,7 +5,7 @@
 // rien n'existe encore, on affiche un état vide explicite.
 // ============================================================
 
-import { db, escapeHTML, formatDate, formatNumber } from "./app.js";
+import { db, escapeHTML, formatDate, formatNumber, cloudinaryOptimize } from "./app.js";
 import { recordDownload } from "./analytics.js";
 import {
   collection,
@@ -121,7 +121,7 @@ export async function initHomePage() {
 
 function renderAppCard(app) {
   const icon = app.icon
-    ? `<img src="${escapeHTML(app.icon)}" alt="" loading="lazy" />`
+    ? `<img src="${escapeHTML(cloudinaryOptimize(app.icon, { width: 120 }))}" alt="" loading="lazy" />`
     : `<span class="icon-fallback">${escapeHTML((app.name || "?").slice(0, 1).toUpperCase())}</span>`;
 
   return `
@@ -189,7 +189,7 @@ export async function initAppPage() {
   root.innerHTML = `
     <div class="app-detail-header">
       <div class="app-detail-icon">
-        ${app.icon ? `<img src="${escapeHTML(app.icon)}" alt="" />` : `<span class="icon-fallback">${escapeHTML((app.name || "?").slice(0, 1).toUpperCase())}</span>`}
+        ${app.icon ? `<img src="${escapeHTML(cloudinaryOptimize(app.icon, { width: 200 }))}" alt="" />` : `<span class="icon-fallback">${escapeHTML((app.name || "?").slice(0, 1).toUpperCase())}</span>`}
       </div>
       <div class="app-detail-heading">
         <h1>${escapeHTML(app.name || "Sans nom")}</h1>
@@ -206,7 +206,7 @@ export async function initAppPage() {
 
     ${screenshots.length > 0 ? `
       <section class="screenshots" aria-label="Captures d'écran">
-        ${screenshots.map((s) => `<img src="${escapeHTML(s)}" alt="Capture d'écran de ${escapeHTML(app.name || "")}" loading="lazy" />`).join("")}
+        ${screenshots.map((s) => `<img src="${escapeHTML(cloudinaryOptimize(s, { width: 640 }))}" alt="Capture d'écran de ${escapeHTML(app.name || "")}" loading="lazy" />`).join("")}
       </section>
     ` : ""}
 
