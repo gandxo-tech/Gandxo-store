@@ -51,6 +51,11 @@ export const SOCIAL_LINKS = {
   facebook: "https://www.facebook.com/profile.php?id=61584148961809"
 };
 
+// Dépôt qui fait foi : chaque push sur `main` déclenche le déploiement
+// GitHub Pages et Vercel. Affiché dans le footer pour que le lien entre
+// le site en ligne et son code source soit visible.
+export const GITHUB_REPO_URL = "https://github.com/gandxo-tech/Gandxo-store";
+
 // -----------------------------------------------------------------
 // Admin de Gandxo Store — vérifié aussi côté serveur (voir
 // firestore.rules : request.auth.token.email == ADMIN_EMAIL). Comme
@@ -85,7 +90,8 @@ export function renderHeader(activePage = "") {
       </nav>
 
       <form class="header-search" id="header-search" role="search">
-        <input type="search" id="header-search-input" placeholder="Rechercher une application..." aria-label="Rechercher une application" />
+        <input type="search" id="header-search-input" placeholder="Rechercher une application..." aria-label="Rechercher une application" autocomplete="off" />
+        <button type="button" class="search-clear" id="search-clear" aria-label="Effacer la recherche" hidden>&times;</button>
         <button type="submit" aria-label="Lancer la recherche">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         </button>
@@ -110,9 +116,41 @@ export function renderHeader(activePage = "") {
   nav.querySelectorAll("a").forEach((link) => link.addEventListener("click", closeNav));
 
   const searchForm = document.getElementById("header-search");
+  const searchInput = document.getElementById("header-search-input");
+  const clearBtn = document.getElementById("search-clear");
+
+  // Bouton « effacer » : visible uniquement quand le champ contient
+  // quelque chose, pour éviter un bouton mort dans le header.
+  function syncClearButton() {
+    if (clearBtn) clearBtn.hidden = searchInput.value.length === 0;
+  }
+  syncClearButton();
+
+  // Filtrage en direct pendant la frappe (léger debounce pour ne pas
+  // reconstruire la grille à chaque caractère). Avant, il fallait
+  // valider le formulaire ou aller sur une autre page.
+  let typingTimer = null;
+  searchInput.addEventListener("input", () => {
+    syncClearButton();
+    if (!document.getElementById("apps-grid")) return;
+    clearTimeout(typingTimer);
+    typingTimer = setTimeout(() => {
+      window.dispatchEvent(new CustomEvent("gandxo:search", { detail: searchInput.value.trim() }));
+    }, 140);
+  });
+
+  if (clearBtn) {
+    clearBtn.addEventListener("click", () => {
+      searchInput.value = "";
+      syncClearButton();
+      window.dispatchEvent(new CustomEvent("gandxo:search", { detail: "" }));
+      searchInput.focus();
+    });
+  }
+
   searchForm.addEventListener("submit", (e) => {
     e.preventDefault();
-    const q = document.getElementById("header-search-input").value.trim();
+    const q = searchInput.value.trim();
     if (!q) return;
 
     // La grille d'accueil est le seul endroit où l'on peut filtrer en direct.
@@ -147,6 +185,7 @@ export function renderFooter() {
       <nav class="footer-nav">
         <a href="index.html">Accueil</a>
         <a href="about.html">À propos</a>
+        <a href="${GITHUB_REPO_URL}" target="_blank" rel="noopener noreferrer">Code source (GitHub)</a>
         <a href="login.html">Espace admin</a>
       </nav>
       <div class="footer-social">
@@ -156,6 +195,34 @@ export function renderFooter() {
     </div>
     <div class="footer-bottom">© ${year} Gandxo Store. Tous droits réservés.</div>
   `;
+}
+
+// -----------------------------------------------------------------
+// Notifications non bloquantes (remplace les alert() pour les
+// confirmations : elles n'interrompent pas la navigation et sont
+// annoncées par les lecteurs d'écran via role="status").
+// -----------------------------------------------------------------
+export function showToast(message, variant = "info") {
+  if (!message) return;
+  let stack = document.querySelector(".toast-stack");
+  if (!stack) {
+    stack = document.createElement("div");
+    stack.className = "toast-stack";
+    stack.setAttribute("role", "status");
+    stack.setAttribute("aria-live", "polite");
+    document.body.appendChild(stack);
+  }
+
+  const toast = document.createElement("div");
+  toast.className = "toast";
+  toast.dataset.variant = variant;
+  toast.textContent = message;
+  stack.appendChild(toast);
+
+  window.setTimeout(() => {
+    toast.remove();
+    if (stack && stack.childElementCount === 0) stack.remove();
+  }, 4200);
 }
 
 // -----------------------------------------------------------------

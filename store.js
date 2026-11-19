@@ -5,7 +5,7 @@
 // rien n'existe encore, on affiche un état vide explicite.
 // ============================================================
 
-import { db, escapeHTML, formatDate, formatNumber, cloudinaryOptimize } from "./app.js";
+import { db, escapeHTML, formatDate, formatNumber, cloudinaryOptimize, showToast } from "./app.js";
 import { recordDownload } from "./analytics.js";
 import {
   collection,
@@ -28,6 +28,22 @@ function dateMillis(value) {
   return Number.isNaN(d.getTime()) ? 0 : d.getTime();
 }
 
+/**
+ * Cartes fantômes affichées pendant le chargement : la page a tout de
+ * suite sa forme finale, au lieu d'afficher une ligne de texte qui se
+ * transforme ensuite en grille.
+ */
+function renderSkeletons(count = 3) {
+  return Array.from({ length: count }, () => `
+    <div class="app-card skeleton-card" aria-hidden="true">
+      <div class="skeleton skeleton-icon"></div>
+      <div class="skeleton skeleton-line w-70"></div>
+      <div class="skeleton skeleton-line w-95"></div>
+      <div class="skeleton skeleton-line w-40"></div>
+    </div>
+  `).join("");
+}
+
 /** N'accepte que des liens http(s) — jamais "javascript:" ou autre. */
 function safeExternalUrl(url) {
   const value = String(url || "").trim();
@@ -42,7 +58,8 @@ export async function initHomePage() {
   const chipsWrap = document.getElementById("category-chips");
   if (!grid) return;
 
-  grid.innerHTML = `<p class="loading">Chargement des applications…</p>`;
+  grid.setAttribute("aria-busy", "true");
+  grid.innerHTML = renderSkeletons(3);
 
   let apps = [];
   try {
@@ -72,6 +89,34 @@ export async function initHomePage() {
 
   let activeCategory = "toutes";
   let activeQuery = initialQuery;
+  const countEl = document.getElementById("results-count");
+
+  /** Affiche le nombre de résultats à côté du titre de section. */
+  function updateCount(shown) {
+    if (!countEl) return;
+    if (apps.length === 0) {
+      countEl.textContent = "";
+      return;
+    }
+    const plural = (n) => (n > 1 ? "s" : "");
+    countEl.textContent = activeQuery || activeCategory !== "toutes"
+      ? `${shown} application${plural(shown)} sur ${apps.length}`
+      : `${apps.length} application${plural(apps.length)} publiée${plural(apps.length)}`;
+  }
+
+  /** Remet la recherche et les filtres à zéro depuis l'état vide. */
+  function resetFilters() {
+    activeCategory = "toutes";
+    activeQuery = "";
+    const input = document.getElementById("header-search-input");
+    renderChips();
+    if (input && input.value) {
+      input.value = "";
+      // Réaligne aussi le bouton « effacer » du header (voir app.js).
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    renderGrid();
+  }
 
   const categories = [...new Set(apps.map((a) => a.category).filter(Boolean))];
 
@@ -82,10 +127,12 @@ export async function initHomePage() {
       return;
     }
     const all = ["toutes", ...categories];
+    chipsWrap.setAttribute("role", "group");
+    chipsWrap.setAttribute("aria-label", "Filtrer par catégorie");
     chipsWrap.innerHTML = all
       .map(
         (cat) =>
-          `<button type="button" class="chip ${cat === activeCategory ? "active" : ""}" data-cat="${escapeHTML(cat)}">${escapeHTML(cat === "toutes" ? "Toutes" : cat)}</button>`
+          `<button type="button" class="chip ${cat === activeCategory ? "active" : ""}" data-cat="${escapeHTML(cat)}" aria-pressed="${cat === activeCategory}">${escapeHTML(cat === "toutes" ? "Toutes" : cat)}</button>`
       )
       .join("");
     chipsWrap.querySelectorAll(".chip").forEach((btn) => {
@@ -112,16 +159,33 @@ export async function initHomePage() {
       );
     }
 
+    grid.setAttribute("aria-busy", "false");
+
     if (apps.length === 0) {
       grid.innerHTML = `<p class="empty-state">Aucune application publiée pour le moment.</p>`;
+      updateCount(0);
       return;
     }
+
     if (filtered.length === 0) {
-      grid.innerHTML = `<p class="empty-state">Aucun résultat pour cette recherche.</p>`;
+      const terms = [activeQuery, activeCategory !== "toutes" ? activeCategory : ""]
+        .filter(Boolean)
+        .map((t) => `« ${escapeHTML(t)} »`)
+        .join(" et ");
+      grid.innerHTML = `
+        <div class="empty-state">
+          <p>Aucun résultat pour ${terms}.</p>
+          <button type="button" class="btn-ghost small" data-reset-filters>Réinitialiser la recherche</button>
+        </div>
+      `;
+      const resetBtn = grid.querySelector("[data-reset-filters]");
+      if (resetBtn) resetBtn.addEventListener("click", resetFilters);
+      updateCount(0);
       return;
     }
 
     grid.innerHTML = filtered.map(renderAppCard).join("");
+    updateCount(filtered.length);
   }
 
   renderChips();
@@ -283,16 +347,24 @@ export async function initAppPage() {
 
   if (btn && downloadUrl) {
     btn.addEventListener("click", async () => {
+      const initialLabel = btn.textContent;
       btn.disabled = true;
       btn.textContent = "Préparation du téléchargement…";
       try {
         await recordDownload({ appId: app.id, appName: app.name, version: app.currentVersion });
+        showToast("Téléchargement lancé. Merci !", "success");
       } catch (err) {
         console.error("Échec de l'enregistrement analytics :", err);
+        showToast("Téléchargement lancé, mais le compteur n'a pas pu être mis à jour.", "error");
       } finally {
-        window.location.href = downloadUrl;
-        btn.disabled = false;
-        btn.textContent = "Télécharger";
+        // Nouvel onglet : la fiche reste ouverte, le retour en arrière est
+        // immédiat et le message de confirmation reste visible.
+        const opened = window.open(downloadUrl, "_blank", "noopener");
+        if (!opened) window.location.href = downloadUrl;
+        window.setTimeout(() => {
+          btn.disabled = false;
+          btn.textContent = initialLabel;
+        }, 1200);
       }
     });
   }

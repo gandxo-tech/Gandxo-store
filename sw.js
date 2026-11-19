@@ -13,7 +13,7 @@
 // ⚠️ À CHAQUE DÉPLOIEMENT : incrémenter CACHE_NAME (v3, v4, …).
 // ============================================================
 
-const CACHE_NAME = "gandxo-store-v2";
+const CACHE_NAME = "gandxo-store-v3";
 
 const SHELL = [
   "./index.html",

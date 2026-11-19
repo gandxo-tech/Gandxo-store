@@ -210,6 +210,7 @@ a { color: inherit; text-decoration: none; }
 }
 .chip:hover { border-color: var(--mint); color: var(--text); }
 .chip.active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.chip:focus-visible { outline: 2px solid var(--mint); outline-offset: 2px; }
 
 /* ---------------- Apps grid ---------------- */
 .apps-section { max-width: 1180px; margin: 0 auto; padding: 40px 24px 96px; }
@@ -252,6 +253,60 @@ a { color: inherit; text-decoration: none; }
   text-align: center; color: var(--text-faint);
   padding: 48px 20px; border: 1px dashed var(--border-strong); border-radius: var(--radius-md);
   font-size: 0.95rem;
+}
+.empty-state p { margin: 0 0 16px; }
+.empty-state .btn-ghost { display: inline-flex; }
+
+/* ---------------- Recherche : compteur + effacement ---------------- */
+.apps-heading {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; margin-bottom: 20px;
+}
+.apps-heading h2 { margin-bottom: 0; }
+.results-count {
+  margin: 0; font-family: var(--font-mono); font-size: 0.78rem;
+  color: var(--text-faint); letter-spacing: 0.02em;
+}
+.search-clear {
+  background: transparent; border: none; color: var(--text-faint);
+  font-size: 1.15rem; line-height: 1; padding: 0 8px; cursor: pointer;
+}
+.search-clear:hover { color: var(--accent); }
+
+/* ---------------- Squelettes de chargement ---------------- */
+.skeleton-card { pointer-events: none; }
+.skeleton {
+  background: linear-gradient(90deg, var(--bg-elevated) 25%, var(--surface-hover) 37%, var(--bg-elevated) 63%);
+  background-size: 400% 100%;
+  border-radius: var(--radius-sm);
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+.skeleton-icon { width: 52px; height: 52px; border-radius: 14px; }
+.skeleton-line { height: 12px; }
+.skeleton-line.w-40 { width: 40%; }
+.skeleton-line.w-70 { width: 70%; }
+.skeleton-line.w-95 { width: 95%; }
+@keyframes skeleton-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+/* ---------------- Toasts ---------------- */
+.toast-stack {
+  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+  width: min(92vw, 420px); display: flex; flex-direction: column; gap: 10px; z-index: 200;
+}
+.toast {
+  background: var(--surface); border: 1px solid var(--border-strong);
+  border-left: 3px solid var(--accent); border-radius: var(--radius-sm);
+  padding: 12px 16px; font-size: 0.88rem; box-shadow: var(--shadow-lift);
+  animation: toast-in 0.18s ease-out;
+}
+.toast[data-variant="success"] { border-left-color: var(--success); }
+.toast[data-variant="error"] { border-left-color: var(--danger); }
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
 }
 
 /* ---------------- App detail page ---------------- */
