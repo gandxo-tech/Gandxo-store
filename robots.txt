@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /admin.html
+Disallow: /login.html
+
+Sitemap: https://gandxo-store.vercel.app/sitemap.xml

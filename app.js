@@ -95,22 +95,39 @@ export function renderHeader(activePage = "") {
 
   const toggle = document.getElementById("nav-toggle");
   const nav = document.getElementById("primary-nav");
+
+  function closeNav() {
+    nav.classList.remove("open");
+    toggle.setAttribute("aria-expanded", "false");
+  }
+
   toggle.addEventListener("click", () => {
     const isOpen = nav.classList.toggle("open");
     toggle.setAttribute("aria-expanded", String(isOpen));
   });
+
+  // Sur mobile, le menu doit se refermer après un choix.
+  nav.querySelectorAll("a").forEach((link) => link.addEventListener("click", closeNav));
 
   const searchForm = document.getElementById("header-search");
   searchForm.addEventListener("submit", (e) => {
     e.preventDefault();
     const q = document.getElementById("header-search-input").value.trim();
     if (!q) return;
-    if (window.location.pathname.endsWith("index.html") || window.location.pathname === "/" ) {
+
+    // La grille d'accueil est le seul endroit où l'on peut filtrer en direct.
+    if (document.getElementById("apps-grid")) {
       window.dispatchEvent(new CustomEvent("gandxo:search", { detail: q }));
+      scrollToApps();
     } else {
       window.location.href = `index.html?q=${encodeURIComponent(q)}#apps`;
     }
   });
+}
+
+function scrollToApps() {
+  const section = document.getElementById("apps");
+  if (section) section.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 // -----------------------------------------------------------------
@@ -174,8 +191,19 @@ export function cloudinaryOptimize(url, { width } = {}) {
   if (!url || !url.includes("res.cloudinary.com") || !url.includes("/upload/")) {
     return url;
   }
+
+  const marker = "/upload/";
+  const rest = url.slice(url.indexOf(marker) + marker.length);
+  const firstSegment = rest.split("/")[0];
+
+  // Une URL déjà transformée ("f_auto,w_500"…) serait invalidée par un
+  // second segment de transformation : on la laisse telle quelle.
+  const isVersion = /^v\d+$/i.test(firstSegment);
+  const looksLikeTransform = /^[a-z]{1,3}_[a-z0-9.]+(,|$)/i.test(firstSegment);
+  if (!isVersion && looksLikeTransform) return url;
+
   const transform = width ? `f_auto,q_auto,w_${width}` : "f_auto,q_auto";
-  return url.replace("/upload/", `/upload/${transform}/`);
+  return url.replace(marker, `${marker}${transform}/`);
 }
 
 // -----------------------------------------------------------------

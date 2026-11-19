@@ -1,76 +1,122 @@
-# Gandxo Store — Guide de mise en route
+# Gandxo Store
 
-Tous les fichiers du site sont dans `main/`, à plat. `firestore.rules` et ce
-`README.md` sont à côté : ce ne sont pas des fichiers du site, mais de la
-config Firebase.
+Store statique (HTML/CSS/JS, sans build) qui liste, détaille et distribue les
+applications de Gandxo. Les données vivent dans Firestore, les images sur
+Cloudinary, l'administration est un simple compte Firebase Auth.
 
-## 🆕 Dernière mise à jour
+**En ligne :** https://gandxo-store.vercel.app — miroir GitHub Pages :
+https://gandxo-tech.github.io/Gandxo-store/
 
-- **Stats protégées contre le spam** : les règles Firestore vérifient
-  maintenant que chaque téléchargement enregistré correspond à une vraie
-  app publiée, avec un timestamp serveur infalsifiable. → il faut
-  republier `firestore.rules` (voir étape 2 ci-dessous).
-- **Site installable (PWA)** : `manifest.json` + `sw.js` + icônes
-  (`icon-192.png`, `icon-512.png`, `favicon.png`, `favicon-32.png`) ajoutés.
-  Sur Android/Chrome, un visiteur peut "Ajouter à l'écran d'accueil" et le
-  site s'ouvre comme une vraie app.
-- **Partage réseaux sociaux amélioré** : une image d'aperçu (`og-image.png`)
-  s'affiche maintenant quand tu partages un lien du store sur
-  Facebook/Instagram/WhatsApp.
-- **Images plus rapides** : les icônes et captures d'écran hébergées sur
-  Cloudinary sont automatiquement servies en format optimisé (WebP/AVIF
-  selon l'appareil) et à la bonne taille — utile sur data mobile.
+---
 
-⚠️ Tous les nouveaux fichiers (`manifest.json`, `sw.js`, `og-image.png`,
-`icon-192.png`, `icon-512.png`, `favicon.png`, `favicon-32.png`) doivent
-être uploadés à la racine de ton repo GitHub, à côté des autres fichiers du
-site — sinon les icônes et le mode installable ne fonctionneront pas.
+## Structure du dépôt
 
-## Déjà fait
+Tous les fichiers du site sont **à la racine** (aucun sous-dossier `main/`) :
 
-- `main/app.js` contient ta config Firebase (`chat-anonyme`), ton compte
-  Cloudinary (`dwdlwjdhe` / `sis_preset`), et ton e-mail admin.
-- Dans l'admin, "Icône" et "Captures d'écran" ont un bouton **Téléverser**
-  qui envoie l'image sur Cloudinary et colle l'URL automatiquement.
-- Toutes les collections sont préfixées `store_` pour ne jamais toucher aux
-  données de SIS dans le même projet Firebase.
-- Ton compte admin (`gbaguidiexauce@gmail.com`) est déjà créé dans
-  Authentication. C'est le seul admin possible : vérifié par e-mail
-  directement dans les règles Firestore.
+| Fichier | Rôle |
+|---|---|
+| `index.html` | Accueil : hero, catégories, grille d'applications |
+| `app.html` | Fiche détaillée d'une application (`?id=…`) |
+| `about.html` | Page à propos + liens sociaux |
+| `login.html` | Connexion admin (Firebase Auth) |
+| `admin.html` | Tableau de bord : stats, CRUD applications, versions |
+| `404.html` | Page d'erreur (utilisée par GitHub Pages) |
+| `app.js` | Init Firebase + header/footer/utilitaires partagés |
+| `store.js` | Logique du store public |
+| `auth.js` | Connexion/déconnexion et garde d'accès admin |
+| `admin.js` | Interface d'administration |
+| `analytics.js` | Enregistrement et agrégation des téléchargements |
+| `sw.js` + `manifest.json` | PWA (installable, réseau d'abord) |
+| `firestore.rules` | **Règles de sécurité à publier dans la console** |
+| `tools/setup-admin.js` | Script local de création du compte admin (hors site) |
+| `AUDIT.md` | Audit complet (sécurité, données, perf, a11y, SEO) |
 
-## Ce qu'il reste à faire
+`tools/` n'est pas destiné au web : il est hors de la logique du site, mais
+GitHub Pages publie tout le dépôt — ne rien y placer de secret.
 
-### 1. Activer l'authentification par e-mail/mot de passe
-Firebase Console > **Authentication** > Sign-in method > active
+## Déploiement
+
+Le site est **synchronisé avec ce dépôt** :
+
+- **GitHub Pages** : build depuis la branche `main`, dossier `/` (racine).
+  Chaque `git push` sur `main` redéploie automatiquement en une minute environ.
+- **Vercel** : projet lié au même dépôt, sans build (`Output: static`).
+
+Il n'y a **aucune étape de compilation** : ce qui est dans le dépôt est ce qui
+est servi. Après un déploiement, penser à incrémenter `CACHE_NAME` dans
+`sw.js` (`gandxo-store-v2` → `v3`, …) pour que les visiteurs récupèrent la
+nouvelle version.
+
+## Configuration Firebase
+
+Le projet `chat-anonyme` est **partagé avec SIS**. Toutes les collections du
+store sont préfixées `store_` pour éviter toute collision :
+
+| Collection | Contenu |
+|---|---|
+| `store_apps/{appId}` | `name`, `shortDesc`, `fullDesc`, `icon`, `category`, `currentVersion`, `size`, `compatibility`, `screenshots[]`, `features[]`, `developer`, `downloadUrl`, `changelog`, `status` (`draft`/`published`), `totalDownloads`, `createdAt`, `updatedAt` |
+| `store_apps/{appId}/versions/{versionId}` | `versionNumber`, `versionCode`, `date`, `size`, `downloadUrl`, `compatibility`, `changelog` |
+| `store_downloads/{downloadId}` | `appId`, `appName`, `version`, `timestamp` (serveur) |
+
+### 1. Authentification
+Firebase Console > **Authentication** > Sign-in method > activer
 **E-mail/Mot de passe**.
 
-### 2. Republier les règles Firestore
-`firestore.rules` (à la racine) contient la version à jour, avec la
-protection anti-spam des téléchargements. Colle-le dans Firestore
-Database > Règles > **Publier**. Comme d'habitude, si SIS a ses propres
-règles à côté, fusionne au lieu de remplacer tout le fichier.
+### 2. Règles Firestore
+Le fichier `firestore.rules` du dépôt est la version de référence. Copier son
+contenu dans Firestore > **Règles** > Publier. Le projet étant partagé avec
+SIS, **fusionner** les blocs `store_*` avec les règles existantes au lieu de
+tout remplacer.
 
-### 3. Déployer
-`main/` est un site statique pur : Vercel, Firebase Hosting, GitHub Pages
-ou Netlify, sans build.
+Ce que garantissent ces règles :
 
-## Pour aller plus loin (pas fait, sur demande)
+- lecture publique des **seules** applications publiées ;
+- écriture sur `store_apps` réservée à l'admin, **sauf** `totalDownloads`
+  (+1) qu'un visiteur peut incrémenter en téléchargeant ;
+- création d'un téléchargement encadrée (champs exacts, `timestamp` serveur,
+  application publiée obligatoire) ;
+- lecture des statistiques réservée à l'admin.
 
-- **Nom de domaine personnalisé** — nécessite d'acheter un domaine et de
-  configurer le DNS ; possible sur GitHub Pages une fois que tu en as un.
-- **Notifications push** — `VAPID_KEY` est présent dans `app.js` mais
-  inutilisé, prêt si tu veux des notifs de nouvelle version plus tard.
+### 3. Compte admin
+```bash
+npm install firebase-admin
+# Placer serviceAccountKey.json à côté de tools/setup-admin.js (ignoré par git)
+node tools/setup-admin.js ton-email@exemple.com ton-mot-de-passe
+```
+L'e-mail admin autorisé est défini à deux endroits, **à garder identiques** :
+`ADMIN_EMAIL` dans `app.js` et la fonction `isAdmin()` dans `firestore.rules`.
 
-## Notes
+### 4. Restreindre la clé API
+La clé Firebase présente dans `app.js` n'est pas un secret, mais elle doit
+être limitée : Google Cloud Console > API Keys > restreindre aux référents
+`https://gandxo-store.vercel.app/*` et `https://gandxo-tech.github.io/*`.
 
-Tant qu'aucune app n'est publiée et qu'aucun téléchargement n'a eu lieu, le
-site affiche des états vides explicites — jamais de données inventées.
+## Ajouter une application
 
-### Structure des données Firestore
+1. Se connecter sur `login.html`.
+2. Onglet **Applications** > **+ Ajouter une application**.
+3. Renseigner nom, descriptions, icône (bouton **Téléverser** → Cloudinary),
+   captures d'écran, lien de téléchargement direct (`.apk`/`.zip`).
+4. Statut **Publiée** pour qu'elle apparaisse sur le site.
+5. Bouton **Versions** pour tenir l'historique ; « Définir comme version
+   actuelle » met à jour version, taille, lien et changelog d'un coup.
 
-- `store_apps/{appId}` — `name`, `shortDesc`, `fullDesc`, `icon`, `category`,
-  `currentVersion`, `size`, `compatibility`, `screenshots[]`, `features[]`,
-  `developer`, `downloadUrl`, `changelog`, `status` (`draft`/`published`),
-  `totalDownloads`, `createdAt`, `updatedAt`.
-- `store_apps/{appId}/versions/{versionId}` — historique des versions.
-- `store_downloads/{downloadId}` — `appId`, `appName`, `version`, `timestamp`.
+Supprimer une application supprime aussi ses versions et son historique de
+téléchargements.
+
+## Notes et limites connues
+
+- **Aucune donnée inventée** : sans application publiée, le site affiche des
+  états vides explicites.
+- Les téléchargements sont **déclarés par le client** : les règles empêchent
+  de cibler une app non publiée, mais un appel direct à l'API REST reste
+  possible. Les chiffres sont fiables en usage normal, pas infalsifiables.
+- Le graphique du dashboard charge les documents de la période sélectionnée
+  (fenêtre limitée à 90 jours maximum, hors « Tout »).
+- Pas de réinitialisation de mot de passe dans l'interface : passer par la
+  console Firebase si nécessaire.
+- `blog.js` est un fichier vide hérité, non utilisé.
+
+## Documentation
+
+`AUDIT.md` contient l'audit complet (constats, sévérités, plan d'action).

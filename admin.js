@@ -19,14 +19,69 @@ import {
   getDocs,
   getDoc,
   query,
-  orderBy,
+  where,
+  writeBatch,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
-// Préfixée "store_" : ce projet Firebase est partagé avec SIS.
+// Préfixées "store_" : ce projet Firebase est partagé avec SIS.
 const APPS_COL = "store_apps";
+const DOWNLOADS_COL = "store_downloads";
+
 let currentRange = "7j";
 let appsCache = [];
+let currentSeries = { labels: [], values: [] };
+
+/** Convertit un Timestamp Firestore (ou une date) en millisecondes. */
+function toMillis(value) {
+  if (!value) return 0;
+  if (typeof value.toMillis === "function") return value.toMillis();
+  if (typeof value.toDate === "function") return value.toDate().getTime();
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? 0 : d.getTime();
+}
+
+/**
+ * Lit une valeur d'<input type="date"> ("AAAA-MM-JJ") comme une date
+ * LOCALE à midi. `new Date("2026-01-05")` donnerait minuit UTC, donc
+ * la veille pour les fuseaux à l'ouest de Greenwich.
+ */
+function parseDateInput(value) {
+  if (!value) return new Date();
+  const [y, m, d] = value.split("-").map(Number);
+  if (!y || !m || !d) return new Date(value);
+  return new Date(y, m - 1, d, 12);
+}
+
+// -----------------------------------------------------------------
+// Modales : ouverture/fermeture accessibles (focus + touche Échap)
+// -----------------------------------------------------------------
+let lastFocusedElement = null;
+
+function openModal(id) {
+  const modal = document.getElementById(id);
+  if (!modal) return;
+  lastFocusedElement = document.activeElement;
+  modal.classList.add("open");
+  const field = modal.querySelector("input:not([type='file']), textarea, select");
+  const target = field || modal.querySelector("button");
+  if (target) target.focus();
+}
+
+function closeModal(id) {
+  const modal = document.getElementById(id);
+  if (!modal) return;
+  modal.classList.remove("open");
+  if (lastFocusedElement && typeof lastFocusedElement.focus === "function") {
+    lastFocusedElement.focus();
+  }
+  lastFocusedElement = null;
+}
+
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  document.querySelectorAll(".modal.open").forEach((modal) => closeModal(modal.id));
+});
 
 document.addEventListener("DOMContentLoaded", () => {
   requireAdmin(async (user) => {
@@ -48,13 +103,28 @@ function wireLogout() {
 }
 
 function wireTabs() {
-  const buttons = document.querySelectorAll(".admin-tab-btn");
-  buttons.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      buttons.forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-      document.querySelectorAll(".admin-tab-panel").forEach((p) => p.classList.remove("active"));
-      document.getElementById(`tab-${btn.dataset.tab}`).classList.add("active");
+  const buttons = Array.from(document.querySelectorAll(".admin-tab-btn"));
+
+  function activate(btn) {
+    buttons.forEach((b) => {
+      const selected = b === btn;
+      b.classList.toggle("active", selected);
+      b.setAttribute("aria-selected", String(selected));
+      b.tabIndex = selected ? 0 : -1;
+    });
+    document.querySelectorAll(".admin-tab-panel").forEach((p) => p.classList.remove("active"));
+    const panel = document.getElementById(`tab-${btn.dataset.tab}`);
+    if (panel) panel.classList.add("active");
+  }
+
+  buttons.forEach((btn, index) => {
+    btn.addEventListener("click", () => activate(btn));
+    btn.addEventListener("keydown", (e) => {
+      if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+      e.preventDefault();
+      const next = buttons[(index + (e.key === "ArrowRight" ? 1 : buttons.length - 1)) % buttons.length];
+      next.focus();
+      activate(next);
     });
   });
 }
@@ -74,12 +144,16 @@ async function loadDashboard() {
 
   let stats;
   try {
-    stats = await getDashboardStats();
+    stats = await getDashboardStats(appsCache.map((a) => a.id));
   } catch (err) {
     console.error(err);
     cards.innerHTML = `<p class="empty-state">Impossible de charger les statistiques.</p>`;
     return;
   }
+
+  const topAppName = stats.topApp
+    ? (appsCache.find((a) => a.id === stats.topApp.id) || {}).name || "—"
+    : null;
 
   cards.innerHTML = `
     <div class="stat-card">
@@ -104,7 +178,7 @@ async function loadDashboard() {
     </div>
     <div class="stat-card wide">
       <span class="stat-label">Application la plus téléchargée</span>
-      <span class="stat-value">${stats.topApp ? escapeHTML(stats.topApp.name || "—") : "Aucun téléchargement pour le moment."}</span>
+      <span class="stat-value">${stats.topApp ? escapeHTML(topAppName) : "Aucun téléchargement pour le moment."}</span>
       ${stats.topApp ? `<span class="stat-sub">${formatNumber(stats.topApp.count)} téléchargements</span>` : ""}
     </div>
   `;
@@ -126,8 +200,13 @@ function renderAppStatsTable(countByApp) {
 
   wrap.innerHTML = `
     <table class="data-table">
+      <caption class="visually-hidden">Téléchargements par application</caption>
       <thead>
-        <tr><th>Application</th><th>Téléchargements</th><th></th></tr>
+        <tr>
+          <th scope="col">Application</th>
+          <th scope="col">Téléchargements</th>
+          <th scope="col"><span class="visually-hidden">Actions</span></th>
+        </tr>
       </thead>
       <tbody>
         ${rows.map(({ app, total }) => `
@@ -149,9 +228,18 @@ function renderAppStatsTable(countByApp) {
 
 async function showAppStatsDetail(appId) {
   const detail = document.getElementById("per-app-stats-detail");
-  detail.innerHTML = `<p class="loading">Chargement…</p>`;
+  if (!detail) return;
+  detail.innerHTML = `<p class="loading" role="status">Chargement…</p>`;
   const app = appsCache.find((a) => a.id === appId);
-  const stats = await getAppStats(appId);
+
+  let stats;
+  try {
+    stats = await getAppStats(appId);
+  } catch (err) {
+    console.error(err);
+    detail.innerHTML = `<p class="empty-state">Impossible de charger le détail de cette application.</p>`;
+    return;
+  }
 
   const versionRows = Object.entries(stats.byVersion);
 
@@ -201,13 +289,44 @@ async function loadChart(range) {
     series = { labels: [], values: [] };
   }
 
+  currentSeries = series;
   const hasData = series.values.some((v) => v > 0);
   emptyMsg.style.display = hasData ? "none" : "block";
   emptyMsg.textContent = "Les statistiques apparaîtront dès les premiers téléchargements.";
   canvas.style.display = hasData ? "block" : "none";
-  if (!hasData) return;
+  if (!hasData) {
+    canvas.setAttribute("aria-label", "Aucun téléchargement sur la période.");
+    return;
+  }
+
+  const total = series.values.reduce((sum, v) => sum + v, 0);
+  const peak = Math.max(...series.values);
+  canvas.setAttribute(
+    "aria-label",
+    `Graphique des téléchargements sur la période : ${total} au total, pic à ${peak} par intervalle.`
+  );
 
   drawLineChart(canvas, series.labels, series.values);
+}
+
+// Redessine le graphique quand la fenêtre change de taille (sinon le
+// canvas reste étiré/flou après une rotation d'écran).
+let resizeTimer = null;
+window.addEventListener("resize", () => {
+  if (!currentSeries.values.some((v) => v > 0)) return;
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    const canvas = document.getElementById("downloads-chart");
+    if (canvas) drawLineChart(canvas, currentSeries.labels, currentSeries.values);
+  }, 150);
+});
+
+function niceMax(value) {
+  if (value <= 4) return Math.max(value, 1);
+  const magnitude = Math.pow(10, Math.floor(Math.log10(value)));
+  const normalized = value / magnitude;
+  const step = normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+  return step * magnitude;
 }
 
 function drawLineChart(canvas, labels, values) {
@@ -215,23 +334,42 @@ function drawLineChart(canvas, labels, values) {
   const dpr = window.devicePixelRatio || 1;
   const cssWidth = canvas.clientWidth || 600;
   const cssHeight = canvas.clientHeight || 260;
-  canvas.width = cssWidth * dpr;
-  canvas.height = cssHeight * dpr;
+  canvas.width = Math.round(cssWidth * dpr);
+  canvas.height = Math.round(cssHeight * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, cssWidth, cssHeight);
 
-  const padding = { top: 16, right: 16, bottom: 28, left: 40 };
+  const padding = { top: 16, right: 16, bottom: 28, left: 46 };
   const w = cssWidth - padding.left - padding.right;
   const h = cssHeight - padding.top - padding.bottom;
-  const max = Math.max(...values, 1);
+  const max = niceMax(Math.max(...values, 1));
 
-  // Axes
-  ctx.strokeStyle = "rgba(237,239,245,0.15)";
-  ctx.lineWidth = 1;
+  const yFor = (v) => padding.top + h - (v / max) * h;
+
+  // Grille horizontale + graduations de l'axe Y
+  ctx.font = "11px 'JetBrains Mono', monospace";
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  const tickCount = 4;
+  for (let i = 0; i <= tickCount; i++) {
+    const value = (max / tickCount) * i;
+    const y = yFor(value);
+    ctx.strokeStyle = i === 0 ? "rgba(237,239,245,0.28)" : "rgba(237,239,245,0.10)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padding.left, y);
+    ctx.lineTo(padding.left + w, y);
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(237,239,245,0.55)";
+    ctx.fillText(formatNumber(Math.round(value)), padding.left - 8, y);
+  }
+
+  // Axe Y
+  ctx.strokeStyle = "rgba(237,239,245,0.28)";
   ctx.beginPath();
   ctx.moveTo(padding.left, padding.top);
   ctx.lineTo(padding.left, padding.top + h);
-  ctx.lineTo(padding.left + w, padding.top + h);
   ctx.stroke();
 
   // Ligne de données
@@ -239,7 +377,7 @@ function drawLineChart(canvas, labels, values) {
   ctx.beginPath();
   values.forEach((v, i) => {
     const x = padding.left + i * stepX;
-    const y = padding.top + h - (v / max) * h;
+    const y = yFor(v);
     if (i === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
   });
@@ -255,7 +393,7 @@ function drawLineChart(canvas, labels, values) {
   ctx.fillStyle = "#F2A93C";
   values.forEach((v, i) => {
     const x = padding.left + i * stepX;
-    const y = padding.top + h - (v / max) * h;
+    const y = yFor(v);
     ctx.beginPath();
     ctx.arc(x, y, 2.5, 0, Math.PI * 2);
     ctx.fill();
@@ -263,9 +401,9 @@ function drawLineChart(canvas, labels, values) {
 
   // Labels X (en sauter certains si trop nombreux)
   ctx.fillStyle = "rgba(237,239,245,0.55)";
-  ctx.font = "11px 'JetBrains Mono', monospace";
   ctx.textAlign = "center";
-  const skip = Math.ceil(labels.length / 8);
+  ctx.textBaseline = "alphabetic";
+  const skip = Math.max(1, Math.ceil(labels.length / 8));
   labels.forEach((label, i) => {
     if (i % skip !== 0 && i !== labels.length - 1) return;
     const x = padding.left + i * stepX;
@@ -278,10 +416,14 @@ function drawLineChart(canvas, labels, values) {
 // -----------------------------------------------------------------
 async function loadApps() {
   const list = document.getElementById("apps-admin-list");
-  list.innerHTML = `<p class="loading">Chargement…</p>`;
+  list.innerHTML = `<p class="loading" role="status">Chargement…</p>`;
   try {
-    const snap = await getDocs(query(collection(db, APPS_COL), orderBy("updatedAt", "desc")));
-    appsCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    // Pas de orderBy("updatedAt") : un document créé sans ce champ
+    // disparaîtrait silencieusement de la liste. Tri côté client.
+    const snap = await getDocs(collection(db, APPS_COL));
+    appsCache = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => toMillis(b.updatedAt) - toMillis(a.updatedAt));
   } catch (err) {
     console.error(err);
     list.innerHTML = `<p class="empty-state">Impossible de charger les applications.</p>`;
@@ -325,22 +467,58 @@ async function toggleStatus(id) {
   const app = appsCache.find((a) => a.id === id);
   if (!app) return;
   const newStatus = app.status === "published" ? "draft" : "published";
-  await updateDoc(doc(db, APPS_COL, id), { status: newStatus, updatedAt: serverTimestamp() });
-  await loadApps();
-  await loadDashboard();
+  try {
+    await updateDoc(doc(db, APPS_COL, id), { status: newStatus, updatedAt: serverTimestamp() });
+    await refreshAll();
+  } catch (err) {
+    console.error(err);
+    alert("Changement de statut impossible. Vérifie ta connexion et tes droits admin.");
+  }
+}
+
+/**
+ * Supprime les téléchargements d'une application, par lots de 400
+ * (limite d'un batch Firestore : 500 écritures).
+ */
+async function deleteDownloadsForApp(appId) {
+  const snap = await getDocs(query(collection(db, DOWNLOADS_COL), where("appId", "==", appId)));
+  for (let i = 0; i < snap.docs.length; i += 400) {
+    const batch = writeBatch(db);
+    snap.docs.slice(i, i + 400).forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+  }
 }
 
 async function deleteApp(id) {
   const app = appsCache.find((a) => a.id === id);
-  if (!confirm(`Supprimer définitivement "${app ? app.name : "cette application"}" ? Cette action est irréversible.`)) return;
-  await deleteDoc(doc(db, APPS_COL, id));
-  await loadApps();
-  await loadDashboard();
+  const label = app ? app.name : "cette application";
+  if (!confirm(
+    `Supprimer définitivement "${label}" ?\n\n` +
+    "Les versions et l'historique de téléchargements associés seront aussi supprimés. " +
+    "Cette action est irréversible."
+  )) return;
+
+  try {
+    await deleteDownloadsForApp(id);
+    const versions = await getDocs(collection(db, APPS_COL, id, "versions"));
+    for (let i = 0; i < versions.docs.length; i += 400) {
+      const batch = writeBatch(db);
+      versions.docs.slice(i, i + 400).forEach((v) => batch.delete(v.ref));
+      await batch.commit();
+    }
+    await deleteDoc(doc(db, APPS_COL, id));
+    await refreshAll();
+  } catch (err) {
+    console.error(err);
+    alert("Suppression impossible. Vérifie ta connexion et tes droits admin.");
+  }
 }
 
 function wireAppForm() {
   document.getElementById("add-app-btn").addEventListener("click", () => openAppForm(null));
   document.getElementById("app-form-cancel").addEventListener("click", closeAppForm);
+  const cancelAlt = document.getElementById("app-form-cancel-2");
+  if (cancelAlt) cancelAlt.addEventListener("click", closeAppForm);
   document.getElementById("app-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     await saveApp();
@@ -413,58 +591,63 @@ function wireImageUploads() {
 }
 
 function openAppForm(app) {
-  const modal = document.getElementById("app-form-modal");
   const form = document.getElementById("app-form");
   form.reset();
   document.getElementById("app-form-title").textContent = app ? "Modifier l'application" : "Ajouter une application";
   form.dataset.editingId = app ? app.id : "";
 
+  // Toujours passer par form.elements : `form.name` est écrasé par
+  // l'<input name="name"> (DOM clobbering) et casserait au moindre
+  // renommage du champ ou attribut name sur le <form>.
+  const fields = form.elements;
+
   if (app) {
-    form.name.value = app.name || "";
-    form.shortDesc.value = app.shortDesc || "";
-    form.fullDesc.value = app.fullDesc || "";
-    form.icon.value = app.icon || "";
-    form.category.value = app.category || "";
-    form.currentVersion.value = app.currentVersion || "";
-    form.size.value = app.size || "";
-    form.compatibility.value = app.compatibility || "";
-    form.downloadUrl.value = app.downloadUrl || "";
-    form.changelog.value = app.changelog || "";
-    form.developer.value = app.developer || "Gandxo";
-    form.screenshots.value = (app.screenshots || []).join("\n");
-    form.features.value = (app.features || []).join("\n");
-    form.status.value = app.status || "draft";
+    fields.name.value = app.name || "";
+    fields.shortDesc.value = app.shortDesc || "";
+    fields.fullDesc.value = app.fullDesc || "";
+    fields.icon.value = app.icon || "";
+    fields.category.value = app.category || "";
+    fields.currentVersion.value = app.currentVersion || "";
+    fields.size.value = app.size || "";
+    fields.compatibility.value = app.compatibility || "";
+    fields.downloadUrl.value = app.downloadUrl || "";
+    fields.changelog.value = app.changelog || "";
+    fields.developer.value = app.developer || "Gandxo";
+    fields.screenshots.value = (app.screenshots || []).join("\n");
+    fields.features.value = (app.features || []).join("\n");
+    fields.status.value = app.status || "draft";
   } else {
-    form.developer.value = "Gandxo";
-    form.status.value = "draft";
+    fields.developer.value = "Gandxo";
+    fields.status.value = "draft";
   }
 
-  modal.classList.add("open");
+  openModal("app-form-modal");
 }
 
 function closeAppForm() {
-  document.getElementById("app-form-modal").classList.remove("open");
+  closeModal("app-form-modal");
 }
 
 async function saveApp() {
   const form = document.getElementById("app-form");
   const editingId = form.dataset.editingId;
 
+  const fields = form.elements;
   const payload = {
-    name: form.name.value.trim(),
-    shortDesc: form.shortDesc.value.trim(),
-    fullDesc: form.fullDesc.value.trim(),
-    icon: form.icon.value.trim(),
-    category: form.category.value.trim(),
-    currentVersion: form.currentVersion.value.trim(),
-    size: form.size.value.trim(),
-    compatibility: form.compatibility.value.trim(),
-    downloadUrl: form.downloadUrl.value.trim(),
-    changelog: form.changelog.value.trim(),
-    developer: form.developer.value.trim() || "Gandxo",
-    screenshots: form.screenshots.value.split("\n").map((s) => s.trim()).filter(Boolean),
-    features: form.features.value.split("\n").map((s) => s.trim()).filter(Boolean),
-    status: form.status.value,
+    name: fields.name.value.trim(),
+    shortDesc: fields.shortDesc.value.trim(),
+    fullDesc: fields.fullDesc.value.trim(),
+    icon: fields.icon.value.trim(),
+    category: fields.category.value.trim(),
+    currentVersion: fields.currentVersion.value.trim(),
+    size: fields.size.value.trim(),
+    compatibility: fields.compatibility.value.trim(),
+    downloadUrl: fields.downloadUrl.value.trim(),
+    changelog: fields.changelog.value.trim(),
+    developer: fields.developer.value.trim() || "Gandxo",
+    screenshots: fields.screenshots.value.split("\n").map((s) => s.trim()).filter(Boolean),
+    features: fields.features.value.split("\n").map((s) => s.trim()).filter(Boolean),
+    status: fields.status.value,
     updatedAt: serverTimestamp()
   };
 
@@ -484,8 +667,7 @@ async function saveApp() {
       });
     }
     closeAppForm();
-    await loadApps();
-    await loadDashboard();
+    await refreshAll();
   } catch (err) {
     console.error(err);
     alert("Erreur lors de l'enregistrement. Vérifie ta connexion et tes droits admin.");
@@ -508,23 +690,34 @@ let versionsAppId = null;
 async function openVersionsPanel(appId) {
   versionsAppId = appId;
   const app = appsCache.find((a) => a.id === appId);
-  const modal = document.getElementById("versions-modal");
   document.getElementById("versions-app-name").textContent = app ? app.name : "";
   document.getElementById("version-form").reset();
-  modal.classList.add("open");
+  openModal("versions-modal");
   await renderVersionsList();
 }
 
 function closeVersionsPanel() {
-  document.getElementById("versions-modal").classList.remove("open");
+  closeModal("versions-modal");
   versionsAppId = null;
 }
 
 async function renderVersionsList() {
   const list = document.getElementById("versions-list");
-  list.innerHTML = `<p class="loading">Chargement…</p>`;
-  const snap = await getDocs(query(collection(db, APPS_COL, versionsAppId, "versions"), orderBy("date", "desc")));
-  const versions = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  list.innerHTML = `<p class="loading" role="status">Chargement…</p>`;
+
+  let versions;
+  try {
+    // Tri côté client : une version enregistrée sans champ `date` ne
+    // doit pas disparaître de l'historique (ce que ferait orderBy).
+    const snap = await getDocs(collection(db, APPS_COL, versionsAppId, "versions"));
+    versions = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => toMillis(b.date) - toMillis(a.date));
+  } catch (err) {
+    console.error(err);
+    list.innerHTML = `<p class="empty-state">Impossible de charger les versions.</p>`;
+    return;
+  }
 
   if (versions.length === 0) {
     list.innerHTML = `<p class="empty-state">Aucune version enregistrée pour le moment.</p>`;
@@ -563,14 +756,15 @@ async function renderVersionsList() {
 
 async function addVersion() {
   const form = document.getElementById("version-form");
+  const fields = form.elements;
   const payload = {
-    versionNumber: form.versionNumber.value.trim(),
-    versionCode: form.versionCode.value.trim(),
-    date: form.date.value ? new Date(form.date.value) : new Date(),
-    changelog: form.changelog.value.trim(),
-    size: form.size.value.trim(),
-    downloadUrl: form.downloadUrl.value.trim(),
-    compatibility: form.compatibility.value.trim()
+    versionNumber: fields.versionNumber.value.trim(),
+    versionCode: fields.versionCode.value.trim(),
+    date: parseDateInput(fields.date.value),
+    changelog: fields.changelog.value.trim(),
+    size: fields.size.value.trim(),
+    downloadUrl: fields.downloadUrl.value.trim(),
+    compatibility: fields.compatibility.value.trim()
   };
 
   if (!payload.versionNumber) {

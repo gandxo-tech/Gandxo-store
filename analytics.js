@@ -1,9 +1,14 @@
 // ============================================================
 // analytics.js — Suivi réel des téléchargements
+//
 // Toute la vérité des statistiques vit dans Firestore. Aucun
-// compteur n'est jamais incrémenté uniquement côté navigateur :
-// chaque téléchargement écrit un document persistant, et les
-// totaux affichés sont recalculés depuis cette source.
+// compteur n'est inventé côté navigateur : chaque téléchargement
+// écrit un document persistant, et les totaux affichés sont
+// recalculés depuis cette source.
+//
+// Coût : les compteurs utilisent des requêtes d'agrégation
+// (`getCountFromServer`), facturées ~1 lecture pour 1000 documents,
+// au lieu de télécharger toute la collection à chaque affichage.
 // ============================================================
 
 import { db } from "./app.js";
@@ -18,7 +23,7 @@ import {
   where,
   orderBy,
   getDocs,
-  getDoc,
+  getCountFromServer,
   Timestamp
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
@@ -29,6 +34,9 @@ const APPS_COL = "store_apps";
 /**
  * Enregistre un téléchargement réel. Appelé uniquement au moment
  * où l'utilisateur clique réellement sur "Télécharger".
+ *
+ * Les règles Firestore limitent la mise à jour de l'application au
+ * seul champ `totalDownloads`, et uniquement +1 (voir firestore.rules).
  */
 export async function recordDownload({ appId, appName, version }) {
   if (!appId) throw new Error("recordDownload: appId manquant");
@@ -40,15 +48,22 @@ export async function recordDownload({ appId, appName, version }) {
     timestamp: serverTimestamp()
   });
 
-  // Compteur persistant côté document app, pour un affichage rapide
-  // sans avoir à recompter toute la collection à chaque chargement.
   const appRef = doc(db, APPS_COL, appId);
   await updateDoc(appRef, { totalDownloads: increment(1) });
 }
 
 /**
- * Récupère tous les événements de téléchargement dans une fenêtre de
- * temps donnée (ou toute la période si aucune borne n'est fournie).
+ * Compte les téléchargements correspondant à des contraintes données,
+ * sans télécharger les documents (agrégation côté serveur).
+ */
+async function countDownloads(constraints = []) {
+  const snap = await getCountFromServer(query(collection(db, DOWNLOADS_COL), ...constraints));
+  return snap.data().count;
+}
+
+/**
+ * Récupère les événements de téléchargement dans une fenêtre de temps.
+ * Utilisé uniquement par le graphique (qui a besoin des dates).
  */
 async function getDownloadsSince(sinceDate) {
   const col = collection(db, DOWNLOADS_COL);
@@ -56,8 +71,7 @@ async function getDownloadsSince(sinceDate) {
   if (sinceDate) {
     constraints.unshift(where("timestamp", ">=", Timestamp.fromDate(sinceDate)));
   }
-  const q = query(col, ...constraints);
-  const snap = await getDocs(q);
+  const snap = await getDocs(query(col, ...constraints));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
@@ -79,44 +93,30 @@ function startOfMonth() {
 }
 
 /**
- * Calcule les statistiques globales réelles pour le dashboard admin :
- * total, aujourd'hui, cette semaine, ce mois, application la plus
- * téléchargée. Basé entièrement sur la collection "downloads".
+ * Statistiques globales réelles pour le dashboard admin.
+ *
+ * @param {string[]} appIds identifiants des applications connues :
+ *        permet de ventiler les téléchargements par application
+ *        avec une agrégation par app (et non un scan complet).
  */
-export async function getDashboardStats() {
-  const [all, today, week, month] = await Promise.all([
-    getDownloadsSince(null),
-    getDownloadsSince(startOfToday()),
-    getDownloadsSince(startOfWeek()),
-    getDownloadsSince(startOfMonth())
+export async function getDashboardStats(appIds = []) {
+  const [total, today, week, month, perApp] = await Promise.all([
+    countDownloads(),
+    countDownloads([where("timestamp", ">=", Timestamp.fromDate(startOfToday()))]),
+    countDownloads([where("timestamp", ">=", Timestamp.fromDate(startOfWeek()))]),
+    countDownloads([where("timestamp", ">=", Timestamp.fromDate(startOfMonth()))]),
+    Promise.all(appIds.map((id) => countDownloads([where("appId", "==", id)])))
   ]);
 
   const countByApp = {};
-  for (const dl of all) {
-    countByApp[dl.appId] = (countByApp[dl.appId] || 0) + 1;
-  }
+  let topApp = null;
+  appIds.forEach((id, i) => {
+    const count = perApp[i] || 0;
+    countByApp[id] = count;
+    if (count > 0 && (!topApp || count > topApp.count)) topApp = { id, count };
+  });
 
-  let topAppId = null;
-  let topAppName = null;
-  let topCount = 0;
-  for (const dl of all) {
-    const c = countByApp[dl.appId];
-    if (c > topCount) {
-      topCount = c;
-      topAppId = dl.appId;
-      topAppName = dl.appName;
-    }
-  }
-
-  return {
-    total: all.length,
-    today: today.length,
-    week: week.length,
-    month: month.length,
-    topApp: topAppId ? { id: topAppId, name: topAppName, count: topCount } : null,
-    countByApp,
-    raw: all
-  };
+  return { total, today, week, month, topApp, countByApp };
 }
 
 /**
@@ -152,8 +152,10 @@ export async function getTimeSeries(range) {
       bucketFn = (date) => Math.floor((now - date) / (24 * 60 * 60 * 1000));
       break;
     case "1a":
-      since = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
-      bucketCount = 12;
+      // 13 mois calendaires (le mois courant + les 12 précédents),
+      // sinon le mois le plus ancien de la période était rejeté.
+      since = new Date(now.getFullYear(), now.getMonth() - 12, 1);
+      bucketCount = 13;
       bucketFn = (date) => (now.getFullYear() - date.getFullYear()) * 12 + (now.getMonth() - date.getMonth());
       break;
     case "tout":
@@ -168,11 +170,11 @@ export async function getTimeSeries(range) {
 
   if (range === "tout") {
     // Regroupement mensuel depuis le tout premier téléchargement
-    if (downloads.length === 0) return { labels: [], values: [] };
     const dates = downloads
       .map((d) => (d.timestamp && d.timestamp.toDate ? d.timestamp.toDate() : null))
       .filter(Boolean);
     if (dates.length === 0) return { labels: [], values: [] };
+
     const oldest = new Date(Math.min(...dates.map((d) => d.getTime())));
     const monthsSpan = (now.getFullYear() - oldest.getFullYear()) * 12 + (now.getMonth() - oldest.getMonth()) + 1;
     const buckets = new Array(monthsSpan).fill(0);
@@ -219,6 +221,8 @@ export async function getTimeSeries(range) {
  * ventilées par version.
  */
 export async function getAppStats(appId) {
+  if (!appId) throw new Error("getAppStats: appId manquant");
+
   const q = query(collection(db, DOWNLOADS_COL), where("appId", "==", appId));
   const snap = await getDocs(q);
   const downloads = snap.docs.map((d) => d.data());

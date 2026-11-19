@@ -11,7 +11,6 @@ import {
   collection,
   query,
   where,
-  orderBy,
   getDocs,
   doc,
   getDoc
@@ -19,6 +18,21 @@ import {
 
 // Préfixée "store_" : ce projet Firebase est partagé avec SIS.
 const APPS_COL = "store_apps";
+
+/** Millisecondes d'un Timestamp Firestore (0 si absent/invalide). */
+function dateMillis(value) {
+  if (!value) return 0;
+  if (typeof value.toMillis === "function") return value.toMillis();
+  if (typeof value.toDate === "function") return value.toDate().getTime();
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? 0 : d.getTime();
+}
+
+/** N'accepte que des liens http(s) — jamais "javascript:" ou autre. */
+function safeExternalUrl(url) {
+  const value = String(url || "").trim();
+  return /^https?:\/\//i.test(value) ? value : "";
+}
 
 // -----------------------------------------------------------------
 // Page d'accueil
@@ -175,10 +189,12 @@ export async function initAppPage() {
 
   let versions = [];
   try {
-    const vSnap = await getDocs(
-      query(collection(db, APPS_COL, appId, "versions"), orderBy("date", "desc"))
-    );
-    versions = vSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    // Tri côté client : une version enregistrée sans champ `date` ne doit
+    // pas disparaître de l'historique (ce que ferait orderBy).
+    const vSnap = await getDocs(collection(db, APPS_COL, appId, "versions"));
+    versions = vSnap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => dateMillis(b.date) - dateMillis(a.date));
   } catch (err) {
     console.error(err);
   }
@@ -258,7 +274,14 @@ export async function initAppPage() {
   `;
 
   const btn = document.getElementById("download-btn");
-  if (btn && app.downloadUrl) {
+  const downloadUrl = safeExternalUrl(app.downloadUrl);
+
+  if (btn && !downloadUrl) {
+    btn.disabled = true;
+    btn.title = "Lien de téléchargement indisponible.";
+  }
+
+  if (btn && downloadUrl) {
     btn.addEventListener("click", async () => {
       btn.disabled = true;
       btn.textContent = "Préparation du téléchargement…";
@@ -267,7 +290,7 @@ export async function initAppPage() {
       } catch (err) {
         console.error("Échec de l'enregistrement analytics :", err);
       } finally {
-        window.location.href = app.downloadUrl;
+        window.location.href = downloadUrl;
         btn.disabled = false;
         btn.textContent = "Télécharger";
       }

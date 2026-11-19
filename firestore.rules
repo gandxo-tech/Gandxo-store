@@ -1,0 +1,92 @@
+rules_version = '2';
+
+// ============================================================
+// firestore.rules — Règles de Gandxo Store
+//
+// ⚠️ Le projet Firebase "chat-anonyme" est PARTAGÉ avec SIS.
+// Ces règles ne couvrent QUE les collections préfixées "store_".
+// Si SIS a ses propres règles, FUSIONNE les blocs : ne remplace
+// jamais tout le fichier publié par celui-ci.
+//
+// Modèle de sécurité :
+//   - lecture publique : uniquement les apps publiées ;
+//   - écriture sur store_apps : admin connecté uniquement, sauf
+//     l'unique champ totalDownloads (+1) qu'un visiteur peut
+//     incrémenter lors d'un téléchargement ;
+//   - store_downloads : création publique encadrée, lecture admin ;
+//   - admin = e-mail exact ET e-mail vérifié (jeton Firebase).
+// ============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email == "gbaguidiexauce@gmail.com";
+    }
+
+    function isString(value) {
+      return value is string;
+    }
+
+    // ---------------------------------------------
+    // Applications
+    // ---------------------------------------------
+    match /store_apps/{appId} {
+      // L'admin voit tout (le dashboard liste sans filtre de statut).
+      // Le public ne voit que les apps publiées : une requête non
+      // filtrée sur ce chemin est refusée par Firestore.
+      allow read: if isAdmin() || resource.data.status == "published";
+
+      allow create, delete: if isAdmin();
+
+      // Écriture admin : tout est permis.
+      allow update: if isAdmin()
+        // Visiteur : uniquement le compteur de téléchargements,
+        // et uniquement +1 sur une app publiée.
+        || (
+          resource.data.status == "published"
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["totalDownloads"])
+          && request.resource.data.totalDownloads == resource.data.totalDownloads + 1
+        );
+
+      // Historique des versions
+      match /versions/{versionId} {
+        allow read: if isAdmin()
+          || get(/databases/$(database)/documents/store_apps/$(appId)).data.status == "published";
+
+        allow create, update, delete: if isAdmin();
+      }
+    }
+
+    // ---------------------------------------------
+    // Téléchargements (analytics)
+    // ---------------------------------------------
+    match /store_downloads/{downloadId} {
+      // Création publique, mais strictement encadrée :
+      // - seuls les champs attendus ;
+      // - timestamp serveur infalsifiable (request.time) ;
+      // - l'app visée doit exister et être publiée.
+      allow create: if request.resource.data.keys().hasOnly(["appId", "appName", "version", "timestamp"])
+        && isString(request.resource.data.appId)
+        && request.resource.data.appId.size() > 0
+        && request.resource.data.appId.size() <= 128
+        && request.resource.data.timestamp == request.time
+        && get(/databases/$(database)/documents/store_apps/$(request.resource.data.appId)).data.status == "published";
+
+      // Lecture et gestion réservées à l'admin.
+      allow read, update, delete: if isAdmin();
+    }
+
+    // ---------------------------------------------
+    // store_admins n'est pas lu par le code (l'autorité est
+    // l'e-mail ci-dessus). On le ferme pour éviter toute escalade
+    // de privilèges si un jour il devient une source d'autorité.
+    // ---------------------------------------------
+    match /store_admins/{uid} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+  }
+}

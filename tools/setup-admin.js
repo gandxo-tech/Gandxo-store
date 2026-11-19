@@ -2,13 +2,17 @@
 // setup-admin.js — Crée (si besoin) ton compte Firebase Auth et
 // te déclare administrateur de Gandxo Store, en une commande.
 //
+// ⚠️ Ce script vit dans tools/ : VOLONTAIREMENT hors de la racine
+// publiée du site, pour qu'il ne soit jamais téléchargeable en ligne.
+//
 // USAGE :
 //   1. npm install firebase-admin
 //   2. Firebase Console > ⚙️ Paramètres du projet > Comptes de service
 //      > "Générer une nouvelle clé privée" > télécharge le JSON,
 //      renomme-le "serviceAccountKey.json", mets-le à côté de ce fichier.
 //      ⚠️ Ne jamais partager ni committer ce fichier (accès total au projet).
-//   3. node setup-admin.js ton-email@exemple.com ton-mot-de-passe
+//      Le .gitignore du dépôt l'exclut déjà.
+//   3. node tools/setup-admin.js ton-email@exemple.com ton-mot-de-passe
 //
 // Si un compte existe déjà pour cet e-mail, son mot de passe n'est PAS
 // changé : seul le mot de passe est utilisé pour créer le compte s'il
@@ -20,7 +24,7 @@
 // ============================================================
 
 const admin = require("firebase-admin");
-const serviceAccount = require("./serviceAccountKey.json");
+const serviceAccount = require("./serviceAccountKey.json"); // à côté de ce fichier (tools/)
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
@@ -31,7 +35,7 @@ async function main() {
   const password = process.argv[3];
 
   if (!email || !password) {
-    console.error("Usage : node setup-admin.js ton-email@exemple.com ton-mot-de-passe");
+    console.error("Usage : node tools/setup-admin.js ton-email@exemple.com ton-mot-de-passe");
     process.exit(1);
   }
   if (password.length < 6) {

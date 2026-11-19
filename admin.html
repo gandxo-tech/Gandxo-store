@@ -31,15 +31,15 @@
     </div>
   </header>
 
-  <nav class="admin-tabs">
-    <button class="admin-tab-btn active" data-tab="dashboard">Tableau de bord</button>
-    <button class="admin-tab-btn" data-tab="applications">Applications</button>
+  <nav class="admin-tabs" role="tablist" aria-label="Sections du tableau de bord">
+    <button class="admin-tab-btn active" id="tab-btn-dashboard" role="tab" aria-selected="true" aria-controls="tab-dashboard" data-tab="dashboard">Tableau de bord</button>
+    <button class="admin-tab-btn" id="tab-btn-applications" role="tab" aria-selected="false" aria-controls="tab-applications" tabindex="-1" data-tab="applications">Applications</button>
   </nav>
 
   <main class="admin-main">
     <!-- ================= DASHBOARD ================= -->
-    <section id="tab-dashboard" class="admin-tab-panel active">
-      <div id="stat-cards" class="stat-cards"></div>
+    <section id="tab-dashboard" class="admin-tab-panel active" role="tabpanel" aria-labelledby="tab-btn-dashboard">
+      <div id="stat-cards" class="stat-cards" aria-live="polite"></div>
 
       <div class="chart-panel">
         <div class="chart-panel-header">
@@ -54,7 +54,7 @@
           </div>
         </div>
         <div class="chart-canvas-wrap">
-          <canvas id="downloads-chart" height="260"></canvas>
+          <canvas id="downloads-chart" height="260" role="img" aria-label="Graphique des téléchargements"></canvas>
           <p id="chart-empty" class="empty-state"></p>
         </div>
       </div>
@@ -66,17 +66,17 @@
     </section>
 
     <!-- ================= APPLICATIONS ================= -->
-    <section id="tab-applications" class="admin-tab-panel">
+    <section id="tab-applications" class="admin-tab-panel" role="tabpanel" aria-labelledby="tab-btn-applications">
       <div class="panel-header-row">
         <h2>Gestion des applications</h2>
         <button id="add-app-btn" class="btn-primary">+ Ajouter une application</button>
       </div>
-      <div id="apps-admin-list" class="apps-admin-list"></div>
+      <div id="apps-admin-list" class="apps-admin-list" aria-live="polite"></div>
     </section>
   </main>
 
   <!-- ================= MODALE : formulaire application ================= -->
-  <div id="app-form-modal" class="modal">
+  <div id="app-form-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="app-form-title">
     <div class="modal-content">
       <div class="modal-header">
         <h2 id="app-form-title">Ajouter une application</h2>
@@ -154,7 +154,7 @@
         </select>
 
         <div class="modal-actions">
-          <button type="button" id="app-form-cancel-2" class="btn-ghost" onclick="document.getElementById('app-form-cancel').click()">Annuler</button>
+          <button type="button" id="app-form-cancel-2" class="btn-ghost">Annuler</button>
           <button type="submit" class="btn-primary">Enregistrer</button>
         </div>
       </form>
@@ -162,10 +162,10 @@
   </div>
 
   <!-- ================= MODALE : versions ================= -->
-  <div id="versions-modal" class="modal">
+  <div id="versions-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="versions-modal-title">
     <div class="modal-content">
       <div class="modal-header">
-        <h2>Versions — <span id="versions-app-name"></span></h2>
+        <h2 id="versions-modal-title">Versions — <span id="versions-app-name"></span></h2>
         <button type="button" id="version-form-close" class="modal-close" aria-label="Fermer">✕</button>
       </div>
 

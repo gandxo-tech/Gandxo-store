@@ -1,0 +1,14 @@
+# Dépendances
+node_modules/
+
+# Secrets Firebase — ne doivent JAMAIS être publiés
+serviceAccountKey.json
+*-firebase-adminsdk-*.json
+.env
+.env.*
+!.env.example
+
+# Outils / OS
+.DS_Store
+Thumbs.db
+*.log
